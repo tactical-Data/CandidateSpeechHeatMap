@@ -1,0 +1,768 @@
+---
+title: "HEAT MAPS & LINGUISTICS OF DEBATE SPEECH in R"
+author: "WW44SS"
+date: "March 14, 2016"
+output: 
+    html_document:
+        theme: united
+---
+
+###SUMMARY
+ 
+This continuation of [BIAS AND CONTEXT IN PRESIDENTIAL DEBATE TEXTS](https://rpubs.com/ww44ss/Debate_Text), which focused on a "Bag of Words" approach to analyzing the text of Presidential Debates. 
+
+This analysis shows a "Heat Map" of frequent words. It is not really a new analysys, but just a better way of visualizing the data. I also 
+
+###DATA SOURCES AND METHODS
+The text of the presidential debates are downloaded from the [UCSB Presidency Project](http://www.presidency.ucsb.edu/debates.php). Transcripts were pasted into Apple Pages and stored as unformatted .txt files.  
+
+
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+    ## 
+    ## automate .txt file detection
+    ##
+    ## input 
+    ##      directory name
+    ## output 
+    ##      two files with the names of republican and democratic debate text files
+    ##
+    ##
+
+    directory <- "/Users/winstonsaunders/Documents/Presidential_Debates_2015/"
+    
+    file.list<-list.files(directory)
+    
+    republican.files<-file.list[grepl("Republican", file.list)]
+    democratic.files<-file.list[grepl("Democratic", file.list)]
+
+
+```
+
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+
+load_debate_text <- function(file_name){
+
+## GET THE DATA
+    ##Read a text file. Filters and conditions the text. Creates a data frame with the row number, candidate name, and text.
+    ## INPUTS
+        ## file_name is the name of the file to read
+    ## OUTPUT
+        ## returns a data frame with row number, candidate name, and text
+    
+    ## data are the raw text files downloaded from the UCSB website.
+    
+    directory <- "/Users/winstonsaunders/Documents/Presidential_Debates_2015/"
+    mydata <- read.table(paste0(directory, file_name), header=FALSE, sep="\n", stringsAsFactors = FALSE, quote = "")
+
+    ## This is what a sample of the the raw data looks like
+    ## mydata[100:105,1]
+        # [1] "QUINTANILLA: Hold it. We'll cut it back to..."
+        # [2] "QUICK: Dr. Carson, let's talk about taxes."
+        # [3] "You have a flat tax plan of 10 percent flat taxes..."
+        # [4] "If you were to took a 10 percent tax..."
+        # [5] "So what analysis got you to the point where you think this will work?"
+        # [6] "CARSON: Well, first of all..."
+
+## ADD COLUMNS OF NUMBERS AND SEPARATE TEXT FROM CANDIDATE NAMES
+    ## Add number column
+    #mydata$n<-1:nrow(mydata)
+    
+    ## get rid of "..."
+    #mydata$V1<-gsub("...", "", mydata$V1)
+    
+    ## fix a few parasitic cases
+    mydata$V1<-gsub("\\.\\.\\. ", "", mydata$V1)
+    mydata$V1<-gsub("\\.\\.\\.", "", mydata$V1)
+    mydata$V1<-gsub("ISIS","Isis", mydata$V1)
+    
+    ## This regex gets rid of all but the capitalized names
+    mydata$name <- gsub(":.+|^[A-Z][^A-Z].+|^[a-z].+", "", mydata$V1 )
+
+    ## Fill in the blank rows
+    for (i in 2: nrow(mydata)){
+        if (mydata$name[i] == "") mydata$name[i] <- mydata$name[i-1]
+    }
+    
+    ##unique(mydata$name)  #this can be used to check the filtering above. 
+
+    ## CREATE COLUMN OF DEBATE TEXT AND CLEAN UP BLANK SPACES
+    mydata$text <- gsub (".", "", mydata$V1, fixed=TRUE)
+    mydata$text <- gsub ("'", "", mydata$text)
+    mydata$text <- gsub ("=", "", mydata$text)
+    mydata$text <- gsub ("[A-Z]{2,}: ", "", mydata$text)
+    mydata$text <- tolower(mydata$text)
+    mydata$text <- gsub ("   ", " ", mydata$text)
+    mydata$text <- gsub ("  ", " ", mydata$text)
+    ##stem a few words
+    #mydata$text <- gsub ("taxes", "tax", mydata$text)
+    #mydata$text <- gsub ("guns", "gun", mydata$text)
+    #mydata$text <- gsub ("veterans ", "veteran ", mydata$text)
+    #mydata$text <- gsub ("terrorists ", "terror ", mydata$text)
+    #mydata$text <- gsub ("terrorism ", "terror ", mydata$text)
+    #mydata$text <- gsub ("streets", "street", mydata$text)
+    #mydata$text <- gsub ("wall street", "wallstreet", mydata$text)
+    
+    #mydata$text <- gsub ("walls ", "wall ", mydata$text)
+    #mydata$text <- gsub ("womens", "women", mydata$text)
+    #mydata$text <- gsub ("[laughter]", " ", mydata$text)
+    #mydata$text <- gsub ("[applause]", " ", mydata$text)
+ 
+## some unused text filters.    
+    #mydata$text <- gsub ("americans", "american", mydata$text)
+    #mydata$text <- gsub ("american", "america", mydata$text)
+
+    
+    
+    ## the data frame now contains four columns which look like this...
+        #     n        name     text
+        # 50 50       RUBIO     Our greatest days lie ahead ....
+        # 51 51 QUINTANILLA     Mr. Trump?
+        # 52 52       TRUMP     I think maybe my greatest weakness ... [laughter]
+
+    
+    return(mydata)
+}
+
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+
+candidate_text <- function(candidate, mydata){
+    ## 
+    ## GET CANDIDATE TEXT
+    ##
+    ## Assumes load_debate_text has been run and the debate text is stored in "mydata"
+    ## creates a text list
+    
+  
+    
+    ## filter for candidate
+    text<-mydata$text[mydata$name==candidate]
+    #text<-paste(text, collapse = " ")
+
+    return(text)
+
+
+}
+```
+
+
+```{r echo=25:29, warning=FALSE, message=FALSE}
+
+    ##
+    ## TEXT_TC
+    ##
+    ## this function returns a text corpus
+    ##
+    ##
+
+    library(tm)
+    library(SnowballC)
+    library(RWeka)
+
+    text_tc <- function(mydata){
+    ## 
+    ## 
+    ##
+    ## Assumes text is stored in "mydata"
+    ## creates a Corpus from the text
+    ## filters some words out 
+        
+    t_c <- Corpus(VectorSource(text))
+    t_c <- tm_map(t_c, content_transformer(tolower))
+    t_c <- tm_map(t_c, removePunctuation)
+    t_c <- tm_map(t_c, removeNumbers)
+    t_c <- tm_map(t_c, removeWords, stopwords("english"))
+    t_c <- tm_map(t_c, removeWords, c("applause", "thats", "laughter", "dont", "back", "can", "get", "cant", "come", "big", "inaudible", "dont", "back", "can", "get"))
+
+    return(t_c)   
+    
+} 
+
+```
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+
+    library(tm)
+    library(RWeka)
+    library(SnowballC)
+
+candidate_text_tc <- function(candidate, mydata, word.filter=""){
+    ## 
+    ## GET CANDIDATE DATA
+    ## 
+    ##
+    ## Assumes load_debate_text has been run and the debate text is stored in "mydata"
+    ## creates a Corpus from the candidate text
+    
+  
+    
+    ## filter for candidate
+    text<-mydata$text[mydata$name==candidate & grepl(word.filter, mydata$text)]
+    text<-paste(text, collapse = " ")
+
+    require(tm)
+    require(SnowballC)
+
+    t_c <- Corpus(VectorSource(text))
+    t_c <- tm_map(t_c, content_transformer(tolower))
+    t_c <- tm_map(t_c, removePunctuation)
+    t_c <- tm_map(t_c, removeNumbers)
+    t_c <- tm_map(t_c, removeWords, stopwords("english"))
+    t_c <- tm_map(t_c, removeWords, c("applause", "thats", "laughter", "dont", "back", "can", "get", "cant", "come", "big", "inaudible", "dont", "back", "can", "get"))
+
+    #t_c <- tm_map(t_c, stemDocument)
+    
+    return(t_c)   
+    
+} 
+
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+
+library(wordcloud)
+library(RColorBrewer)
+
+ color_map2<-c("#00003B","#041851","#4E0812" ,"#051E65", "#650A16", "#103374",  "#9F1A2D", "#482B25")
+
+c_wordcloud <- function(t_c){
+    
+    ## 
+    ## CREATE WORD CLOUD
+    ##
+    ## Assumes a text Corpus has been created
+    ## 
+    
+    set.seed(8675309)
+    
+   
+    color_map2<-c("#00003B","#041851","#4E0812" ,"#051E65", "#650A16", "#103374",  "#9F1A2D", "#482B25")
+    
+    wordcloud(t_c, scale=c(4,0.4), max.words=150, min.freq=20, random.order=FALSE, rot.per=0.2, use.r.layout=FALSE, colors=color_map2)
+
+    
+
+}
+
+```
+
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+    r_all<-NULL
+
+    ## GET ALL REPUB DEBATES
+
+    for (file_name in republican.files){ 
+        
+        ## load the text
+        r_temp<-load_debate_text(file_name)
+        
+        r_all<-rbind(r_all, r_temp)
+        
+        
+    }
+
+    d_all<-NULL
+
+    ## GET ALL REPUB DEBATES
+
+    for (file_name in democratic.files){ 
+        
+        ## load the text
+        d_temp<-load_debate_text(file_name)
+        
+        d_all<-rbind(d_all, d_temp)
+    
+    }
+
+     
+
+    ## CREATE TCs FOR EACH CANDIDATE
+    trump_all<-candidate_text_tc("TRUMP",r_all)
+    rubio_all<-candidate_text_tc("RUBIO",r_all)
+    fiorina_all<-candidate_text_tc("FIORINA",r_all)
+    carson_all<-candidate_text_tc("CARSON",r_all)
+    cruz_all<-candidate_text_tc("CRUZ",r_all)
+    huckabee_all<-candidate_text_tc("HUCKABEE",r_all)
+    bush_all<-candidate_text_tc("BUSH",r_all)
+
+    clinton_all<-candidate_text_tc("CLINTON",d_all)
+    sanders_all<-candidate_text_tc("SANDERS",d_all)
+    
+    
+    
+```
+
+
+
+
+
+<style>
+  .col2 {
+    columns: 2 300px;         /* number of columns and width in pixels*/
+    -webkit-columns: 2 300px; /* chrome, safari */
+    -moz-columns: 2 300px;    /* firefox */
+  }
+  .col3 {
+    columns: 3 200px;
+    -webkit-columns: 3 200px;
+    -moz-columns: 3 200px;
+  }
+</style>
+
+###CANDIDATE WORD FREQUENCIES
+
+We can check word frequency directly by tokenizing the text and counting single words. (Note: this is a partial duplication of the work done in the first analysis. But as the word vector analysis below leverages some of the output of this, it's reproduced here in a slightly different format as a control of quality)
+
+
+<style>
+tr:hover {background-color: #BBFFFF}
+table { 
+    width: 80%;
+    display: table;
+    border-collapse: collapse;
+    border-spacing: 18px;
+    border-color: #AAAAFF;
+    background-color: #AFEEEE;
+    padding: 2px;
+    font: 12px arial, sans-serif;
+}
+th, td{
+    text-align: center;
+}
+</style>
+
+
+```{r, echo=FALSE}
+
+## Create Term_Document_Matrices
+
+TDM_trump <- TermDocumentMatrix(trump_all)
+TDM_rubio <- TermDocumentMatrix(rubio_all)
+TDM_fiorina <- TermDocumentMatrix(fiorina_all)
+TDM_carson <- TermDocumentMatrix(carson_all)
+TDM_cruz <- TermDocumentMatrix(cruz_all)
+TDM_huckabee <- TermDocumentMatrix(huckabee_all)
+TDM_bush <- TermDocumentMatrix(bush_all)
+
+TDM_clinton <- TermDocumentMatrix(clinton_all)
+TDM_sanders <- TermDocumentMatrix(sanders_all)
+
+```
+
+
+
+```{r, echo=FALSE, results='asis', fig.align='center'}
+
+library(xtable)
+
+## Create table of frequent terms
+## note: The Frequent Term utility does not rank by order. It produces a character vector of terms in x which occur more or equal often than lowfreq times and less or equal often than highfreq times.
+
+# row_names <- c("Trump", "Sanders", "Clinton", "Fiorina", "Cruz", "Rubio" )
+# col_names <- c("most frequent", "Second", "Third", "Fourth", "Fifth")
+
+# word_mat<-matrix(
+#     c(findFreqTerms(TDM_trump, 30)[1:5],
+#       findFreqTerms(TDM_sanders, 30)[1:5],
+#       findFreqTerms(TDM_clinton, 30)[1:5],
+#       findFreqTerms(TDM_fiorina, 10)[1:5],
+#       findFreqTerms(TDM_cruz, 10)[1:5],
+#       findFreqTerms(TDM_rubio, 10)[1:5]), nrow = 6, byrow = TRUE, dimnames = list(row_names ,col_names ) )
+# 
+# word_df<-as.data.frame(word_mat)
+# 
+# 
+# 
+# print(xtable(word_df), type='html', comment=FALSE, include.rownames=TRUE, 
+#       html.table.attributes='border="3" align="center" ' )
+
+
+```
+
+
+
+
+```{r, echo=FALSE}
+
+#findAssocs_candidate(TDM_trump,"country")
+# findAssocs_candidate(TDM_sanders,"people")
+# findAssocs_candidate(TDM_clinton,"people")
+# findAssocs_candidate(TDM_fiorina,"people")
+
+```
+
+
+```{r, echo=FALSE}
+
+## WORD COUNTS FOR CANDIDATES
+##  This code chunk takes a bunch of TDMs and converts them first to 
+##  the specific vocabulary of each candidate and them produces a table of words
+##
+## INPUT: 
+##  a TDM of candidate speech
+##  
+
+## Build a matrix owith counts of specific words for a list of candidates
+
+## First convert TDMs to Data Frames
+
+    a<-as.matrix(TDM_trump)
+    b<-as.data.frame(a)
+    df_trump<-b
+    colnames(df_trump)<-"trump"
+    
+    words_trump<-sum(df_trump)
+    vocab_trump<-nrow(df_trump)
+    
+    a<-as.matrix(TDM_rubio)
+    b<-as.data.frame(a)
+    df_rubio<-b
+    colnames(df_rubio)<-"rubio"
+    
+    words_rubio<-sum(df_rubio)
+    vocab_rubio<-nrow(df_rubio)
+    
+    a<-as.matrix(TDM_sanders)
+    b<-as.data.frame(a)
+    df_sanders<-b
+    colnames(df_sanders)<-"sanders"
+    
+    words_sanders<-sum(df_sanders)
+    vocab_sanders<-nrow(df_sanders)
+    
+    a<-as.matrix(TDM_fiorina)
+    b<-as.data.frame(a)
+    df_fiorina<-b
+    colnames(df_fiorina)<-"fiorina"
+    
+    words_fiorina<-sum(df_fiorina)
+    vocab_fiorina<-nrow(df_fiorina)
+    
+    a<-as.matrix(TDM_clinton)
+    b<-as.data.frame(a)
+    df_clinton<-b
+    colnames(df_clinton)<-"clinton"
+    
+    words_clinton<-sum(df_clinton)
+    vocab_clinton<-nrow(df_clinton)
+    
+    a<-as.matrix(TDM_cruz)
+    b<-as.data.frame(a)
+    df_cruz<-b
+    colnames(df_cruz)<-"cruz"
+    
+    words_cruz<-sum(df_cruz)
+    vocab_cruz<-nrow(df_cruz)
+
+
+## merge the data frames
+
+    ## merge trump and sanders
+    merged_candidates<-merge(df_trump, df_sanders, by=0, all=TRUE)
+    ## assign rownames
+    rownames(merged_candidates) <- merged_candidates$Row.names
+    ## clear $Row.names
+    merged_candidates$Row.names <- NULL
+    ## merge clinton
+    merged_candidates<-merge(merged_candidates, df_clinton, by="row.names", all=TRUE)
+    rownames(merged_candidates)<-merged_candidates$Row.names
+    merged_candidates$Row.names <- NULL
+    ## merge rubio
+    merged_candidates<-merge(merged_candidates, df_rubio, by="row.names", all=TRUE)
+    rownames(merged_candidates)<-merged_candidates$Row.names
+    merged_candidates$Row.names <- NULL
+    ##merge cruz
+    merged_candidates<-merge(merged_candidates, df_cruz, by="row.names", all=TRUE)
+    rownames(merged_candidates)<-merged_candidates$Row.names
+
+    
+
+    ## fix NAs
+    merged_candidates[is.na(merged_candidates)]<-0
+
+    ## make $Row.names a factor
+    merged_candidates$Row.names<-as.factor(merged_candidates$Row.names)
+
+    ## merged_candidates is now computed
+    
+    ## COMPUTE WORD SUMS
+    
+    ## sum all
+merged_candidates$all <- merged_candidates$trump + merged_candidates$sanders + merged_candidates$clinton+ merged_candidates$rubio + merged_candidates$cruz
+
+## sort it
+merged_candidates<-merged_candidates[with(merged_candidates, order(-all)), ]
+
+#merged_candidates <- merged_candidates[merged_candidates$all>50,]
+## convert Row.names to a factor
+merged_candidates$Row.names<-as.factor(merged_candidates$Row.names)
+
+merged_candidates<-merged_candidates[complete.cases(merged_candidates),]
+
+
+## This is an exaple of what the data look like (in Jan 2016)
+#         Row.names trump sanders clinton rubio cruz all
+# people     people   105     162     117    86   24 494
+# going       going    84      84      90    56   13 327
+# think       think    31     110     150    10   13 314
+# country   country    64     119      57    52   10 302
+# know         know    47      55     114    37   41 294
+# will         will    43      47      70    45   55 260
+
+```
+
+There are a total of `r dim(merged_candidates)[1]` words in the combined vocabulary of the candidates.  
+
+```{r, echo=FALSE, results="asis"}
+
+library(xtable)
+
+
+## create lists sorted by decreasing order of each candidate
+c_1<-merged_candidates[with(merged_candidates, order(-clinton)), ]
+s_1<-merged_candidates[with(merged_candidates, order(-sanders)), ]
+tc_1<-merged_candidates[with(merged_candidates, order(-cruz)), ]
+t_1<-merged_candidates[with(merged_candidates, order(-trump)), ]
+r_1<-merged_candidates[with(merged_candidates, order(-rubio)), ]
+
+## take the top 5 of each
+compare_mf <- rbind(c_1[1:5,], tc_1[1:5,], s_1[1:5,], t_1[1:5,], r_1[1:5,])
+colnames(compare_mf)<-c("word", "trump", "sanders", "clinton", "rubio","cruz", "all")
+
+compare_mf<-compare_mf[with(compare_mf, order(-all)),]
+
+## compute column sums for each candidate
+trump_sum<-sum(merged_candidates[,"trump"])
+sanders_sum<-sum(merged_candidates[,"sanders"])
+clinton_sum<-sum(merged_candidates[,"clinton"])
+cruz_sum<-sum(merged_candidates[,"cruz"])
+rubio_sum<-sum(merged_candidates[,"rubio"])
+sum_all<-sum(merged_candidates[,"all"])
+sum_row<-c("SUM", trump_sum, sanders_sum, clinton_sum, cruz_sum, rubio_sum, sum_all)
+
+#bind rows
+compare_mf$word<-as.character(compare_mf$word)
+compare_mf<-rbind(compare_mf, sum_row)
+
+print(xtable(unique(compare_mf), digits=0), type='html', comment=FALSE, include.rownames=FALSE, 
+html.table.attributes='border="3" align="center" ' )
+
+```
+
+
+__- Hilary Clinton__ spoke a total of `r words_clinton` and had a vocabulary of `r vocab_clinton` words.     
+__- Bernie Sanders__ spoke `r words_sanders` total words, with a vocabulary of `r vocab_sanders`.   
+__- Donald Trump__ spoke `r words_trump` and with a vocabulary of `r vocab_trump`.  
+__- Ted Cruz__ spoke `r words_cruz` and with a vocabulary of `r vocab_cruz`.  
+__- Marco Rubio__ spoke `r words_rubio` and with a vocabulary of `r vocab_rubio`.   
+
+A "heat map" of frequent words shows several interesting patterns. For instance, all candidates but one use the word _"people"_ with high frequency. Conversely, only one candidate mentions the word _"tax"_ frequently.
+
+```{r, echo=FALSE, fig.align="center", fig.height=3, fig.width=9, message=FALSE, warning=FALSE}
+
+## this creates a heat map of the same data above
+
+## INPUT:
+##      merged_dandidates from above
+## OUTPUT: 
+##      a plot
+
+merged_candidates_p<-merged_candidates[1:60,]
+
+## compute column sums for each candidate
+merged_candidates_p[,"trump"]<-merged_candidates_p[,"trump"]/sum(merged_candidates[,"trump"])
+merged_candidates_p[,"sanders"]<-merged_candidates_p[,"sanders"]/sum(merged_candidates[,"sanders"])
+merged_candidates_p[,"clinton"]<-merged_candidates_p[,"clinton"]/sum(merged_candidates[,"clinton"])
+merged_candidates_p[,"cruz"]<-merged_candidates_p[,"cruz"]/sum(merged_candidates[,"cruz"])
+merged_candidates_p[,"rubio"]<-merged_candidates_p[,"rubio"]/sum(merged_candidates[,"rubio"])
+merged_candidates_p[,"all"]<-merged_candidates_p[,"all"]/sum(merged_candidates[,"all"])
+
+library(reshape2)
+
+    mcp_m <- melt(merged_candidates_p)
+    colnames(mcp_m)<-c("word", "candidate", "frequency")
+    
+    library(ggplot2)
+    
+    p<-ggplot(mcp_m, aes(x=word,y=candidate))
+    p<- p + geom_tile(aes(fill=frequency), color="white")
+    p<- p + scale_fill_gradient2(low = "white", mid = "steelblue", high = "darkblue", midpoint=0.01, na.value="grey50")
+    p <- p + ggtitle("candidate/word heatmap")
+    p <- p + xlab("word")
+    p <- p + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.5))
+    p <- p + ylab("candidate")
+    
+    p
+```
+ 
+
+
+####NORMALIZED WORD FREQUENCIES
+
+Words frequencies convey differences from one candidate to the next. This is a graph of the "top" words used by all candidates, normalized by word count, 
+$\nu_{i} = W_{i} / \sum_{k=1}^{N} W_{k}$, where $\nu_{i}$ is the normalized frequency of word $i$ with count $W_{i}$. The $\nu_{i}$ for each candidate are plotted for the most-used words as measured for the ensemble of all candidates.  
+An interesting way to look at the differences in word frequencies is using [Zipf's Law](https://en.wikipedia.org/wiki/Zipf%27s_law) to compare frequencies of words both in the overall vocabulary of the debates and the individual candidate responses. Zipf's law states that the frequency $\nu_{i}$ of a word is inversely proportional to its rank.  
+In the graph below the overall behavior (taking all the candidate speech) shows this law is followed fairly well. What's interesting is to plot along side it the speech of the individual candidates. Zipf's law provides a "baseline" for vocabulary usage. Since many of hte words used are the same, it's deviation from the baseline that will provide insights into different interpretations of speech in a "bag of words" model. 
+
+```{r, echo=FALSE, fig.align="center", fig.height= 5, fig.width=8, message=FALSE, warning=FALSE}
+
+library(reshape2)
+
+    merged_plot<-melt(merged_candidates[merged_candidates$all>50,])
+    colnames(merged_plot)<-c("words", "candidate", "count")
+
+library(ggplot2)
+
+    p <- ggplot(merged_plot, aes(x = words, y = count, color=candidate))
+    p <- p + geom_point(size=3, pch=19)
+    p <- p + theme(axis.text.x=element_text(face="italic", color="#222222"), axis.text.y=element_text(face="italic", color="#222222"))
+    #p <- p + coord_flip()
+    p <- p + ggtitle("CANDIDATE WORD COUNT")
+    p <- p + xlab("word")
+    p <- p + ylab("count")
+    #p
+
+```
+
+```{r echo=FALSE}
+
+
+# Multiple plot function copied from http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+
+
+```
+
+
+
+
+```{r, echo=FALSE, fig.align="center", fig.height=8, fig.width=5, message=FALSE, warning=FALSE}
+mc<-merged_candidates
+mc$rank <- 1:nrow(mc)
+##normalize counts
+mc$clinton<-mc$clinton/sum(mc$clinton)
+mc$sanders<-mc$sanders/sum(mc$sanders)
+mc$trump<-mc$trump/sum(mc$trump)
+mc$cruz<-mc$cruz/sum(mc$cruz)
+mc$rubio<-mc$rubio/sum(mc$rubio)
+
+mc$norm_all<-mc$all/sum(mc$all)
+
+mc_plot<-mc[mc$all>50,]
+
+
+
+p <- ggplot(mc_plot, aes(x = log(rank)))
+#p <- p + geom_line(size=0.5)
+## add points
+# p <- p + geom_point(aes(y = clinton, color="clinton"), size=2)
+# p <- p + geom_point(aes(y = sanders, color="sanders"), size=2)
+# p <- p + geom_point(aes(y = trump, color="trump"), size=2)
+# p <- p + geom_point(aes(y = cruz, color="cruz"), size=2)
+# p <- p + geom_point(aes(y = rubio, color="rubio"), size=2)
+
+## add lines
+#p <- p + geom_line(aes(y = clinton, color="clinton"), size=.5)
+#p <- p + geom_line(aes(y = sanders, color="sanders"), size=.5)
+#p <- p + geom_line(aes(y = trump, color="trump"), size=.5)
+#p <- p + geom_line(aes(y = cruz, color="cruz"), size=.5)
+#p <- p + geom_line(aes(y = rubio, color="rubio"), size=.5)
+#p <- p + scale_colour_manual(values = c("blue", "red","darkred", "darkblue", "darkorange"))
+
+p <- p + theme(legend.title=element_blank())
+#p <- p + coord_flip()
+p <- p + xlab("log(rank)")
+p <- p + ylab("log(frequency)")
+
+
+pa <- p + ggtitle("All Candidate Word Frequencies")
+pa <- pa + geom_point(aes(y = log(norm_all), color="all"), size=2)
+
+## clinton Sanders compare
+ 
+pd <- p + ggtitle("Democratic Candidate Word Frequencies")
+pd <- pd + geom_point(aes(y = log(clinton), color="clinton"), size=2)
+pd <- pd + geom_point(aes(y = log(sanders), color="sanders"), size=2)
+#pd <- pd + geom_point(aes(y = trump, color="Republican"), size=1)
+#pd <- pd + geom_point(aes(y = cruz, color="Republican"), size=1)
+#pd <- pd + geom_point(aes(y = rubio, color="Republican"), size=1)
+
+## trump and cruz compare
+#pr <- p + geom_line(aes(y = trump, color="trump"), size=.5)
+#pr <- pr + geom_line(aes(y = cruz, color="cruz"), size=.5)
+#pr <- pr + geom_line(aes(y = rubio, color="rubio"), size=.5)
+pr <- p + ggtitle("Republican Candidate Word Frequencies")
+#pr <- pr + geom_point(aes(y = clinton, color="Democratic"), size=1)
+#pr <- pr + geom_point(aes(y = sanders, color="Democratic"), size=1)
+pr <- pr + geom_point(aes(y = log(trump), color="trump"), size=2)
+pr <- pr + geom_point(aes(y = log(cruz), color="cruz"), size=2)
+pr <- pr + geom_point(aes(y = log(rubio), color="rubio"), size=2)
+
+library(grid)
+
+multiplot(pa, pd, pr, cols = 1)
+```
+
+
+
+
+####CONCLUSIONS
+
+Candidate word choices vary from candidate to candidate. While the overall speech follows expected linguistic behavior, the candidate's usages vary remarkably. This provides some basis for believeing a "bag of words" approach can provide at least some intelligence into candidate poistions and biases. The differences appear to be most profound at higher ranking words, suggesting this might be a place to look for greater subtlety in sentiment.
+
+

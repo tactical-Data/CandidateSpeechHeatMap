@@ -1,2 +1,2 @@
-# CandidateSpeechHeatMap
-Plots a heat map of words from Presidential Debate Texts
+# CandidateHeatMap
+Heat Map of Candidate Word Frequencies
