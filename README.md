@@ -13,13 +13,13 @@ A sample output of the program is shown [here](http://rpubs.com/ww44ss/debatehea
 [Party] Candidates Debate [Location] [Date].txt   text of [Party] debate held in [Location] on [Date]  
 
 ##PROGRAM FILES  
-candidate_text.R                                  raw text of candidate speech     
-candidate_text_tc.R                               returns a text corpus using the {tm} package   
-load_debate_text.R                                load raw .txt files  
-multiplot.R                                       Multiple plot function from [here](http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/)   
-vector.normalize.R                                Makes a vector unit length   
+candidate_text.R                                  _raw text of candidate speech_     
+candidate_text_tc.R                               _returns a text corpus using the_ {tm} _package_   
+load_debate_text.R                                _load raw_ .txt _files_  
+multiplot.R                                       _Multiple plot function from_ [here](http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/)   
+vector.normalize.R                                _Makes a vector unit length_   
 
-Candidate_HeatMapR_1.Rmd                          Produces a heat map graph of candidate text (filterable)   
+Candidate_HeatMapR_1.Rmd                          _Produces a heat map graph of candidate text (filterable)_    
 
 
 
