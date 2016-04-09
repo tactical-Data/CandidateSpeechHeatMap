@@ -9,17 +9,19 @@ Input .txt files of the debates are also included. Data are acquired from the [U
 A sample output of the program is shown [here](http://rpubs.com/ww44ss/debateheatmap)
 
 
-##DATA FILES:  
+###FILES: 
+
+File Name                                         | _descritpion_
+--------------------------------------------------|--------------------------
 [Party] Candidates Debate [Location] [Date].txt   |_text of_ [Party] _debate held in_ [Location] _on_ [Date]  
-                                                  |
-##PROGRAM FILES                                   |
+                                                  |                                  |
 candidate_text.R                                  |_raw text of candidate speech_     
 candidate_text_tc.R                               |_returns a text corpus using the_ {tm} _package_   
 load_debate_text.R                                |_load raw_ .txt _files_  
 multiplot.R                                       |_Multiple plot function from_ [here](http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/)   
 vector.normalize.R                                |_Makes a vector unit length_   
-
-Candidate_HeatMapR_1.Rmd                          _Produces a heat map graph of candidate text (filterable)_    
+--------------------------------------------------|-----------------------------
+Candidate_HeatMapR_1.Rmd                          |_Produces a heat map graph of candidate text (filterable)_    
 
 
 
