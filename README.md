@@ -8,6 +8,12 @@ Input .txt files of the debates are also included. Data are acquired from the [U
 
 A sample output of the program is shown [here](http://rpubs.com/ww44ss/debateheatmap)
 
+The program can be tuned by editing the line in the code
+```{r, echo=TRUE, warning=FALSE}
+    ##FILTER TEXT
+    word.filter <- "terror"
+```
+
 
 ###FILES: 
 
@@ -21,7 +27,7 @@ load_debate_text.R                                |_load raw_ .txt _files_
 multiplot.R                                       |_Multiple plot function from_ [here](http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/)   
 vector.normalize.R                                |_Makes a vector unit length_   
 --------------------------------------------------|-----------------------------
-Candidate_HeatMapR_1.Rmd                          |_Produces a heat map graph of candidate text (filterable)_    
+Candidate_HeatMapR_1.Rmd                          |_Produces a heat map graph of candidate text_    
 
 
 
