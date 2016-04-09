@@ -13,7 +13,7 @@ The program can be tuned by editing the line in the code
     ##FILTER TEXT
     word.filter <- "terror"
 ```
-
+which selects debate responses containing that word (selected with a simple regex).
 
 ###FILES: 
 
